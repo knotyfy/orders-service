@@ -1,0 +1,24 @@
+GET /actuator/health
+====================
+
+Purpose: process liveness. After Flyway + Postgres are up, status is UP.
+
+
+REQUEST
+-------
+GET /actuator/health HTTP/1.1
+Host: localhost:8080
+Accept: application/json
+
+curl:
+  curl -i http://localhost:8080/actuator/health
+
+
+RESPONSE 200
+------------
+HTTP/1.1 200 OK
+Content-Type: application/vnd.spring-boot.actuator.v3+json
+
+{
+  "status": "UP"
+}

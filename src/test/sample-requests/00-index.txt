@@ -1,0 +1,18 @@
+Orders Service — sample HTTP requests and responses
+===================================================
+
+Base URL: http://localhost:8080
+Seed catalog (Flyway V2):
+  WIDGET-1   stock=1   unitPrice=10.00 USD
+  WIDGET-10  stock=10  unitPrice=5.00  USD
+  FAIL-CARD  stock=10  unitPrice=1.00  USD   (mock payment always fails)
+
+Files
+-----
+01-GET-actuator-health.txt
+02-GET-products-by-sku.txt
+03-POST-orders.txt
+04-GET-orders-by-id.txt
+
+IDs, timestamps, and totals below are representative. Replace order IDs with
+values returned by POST /api/v1/orders on a live run.

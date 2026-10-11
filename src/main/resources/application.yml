@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: orders-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/orders
+    username: orders
+    password: orders
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+orders:
+  payment-timeout: 15m
+  payment:
+    max-attempts: 3
+  job:
+    enabled: true
+    interval-ms: 5000
+    stale-claim: 2m

@@ -1,0 +1,16 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+orders:
+  payment-timeout: 15m
+  payment:
+    max-attempts: 3
+  job:
+    enabled: false
+    interval-ms: 60000
+    stale-claim: 2m

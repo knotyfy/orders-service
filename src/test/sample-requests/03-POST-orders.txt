@@ -1,0 +1,272 @@
+POST /api/v1/orders
+===================
+
+Purpose: reserve stock, snapshot catalog prices, persist PENDING_PAYMENT.
+Required header: Idempotency-Key
+Client never sends prices.
+
+
+REQUEST — create (happy path)
+-----------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-1
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-10",
+      "quantity": 2
+    }
+  ]
+}
+
+curl:
+  curl -i -X POST http://localhost:8080/api/v1/orders \
+    -H "Content-Type: application/json" \
+    -H "Idempotency-Key: demo-1" \
+    -d '{"customerId":"cust-1","items":[{"sku":"WIDGET-10","quantity":2}]}'
+
+
+RESPONSE 201 Created
+--------------------
+HTTP/1.1 201 Created
+Location: http://localhost:8080/api/v1/orders/9c1a2b3d-4e5f-6789-abcd-ef0123456789
+Content-Type: application/json
+
+{
+  "id": "9c1a2b3d-4e5f-6789-abcd-ef0123456789",
+  "customerId": "cust-1",
+  "status": "PENDING_PAYMENT",
+  "currency": "USD",
+  "totalAmount": 10.00,
+  "paymentAttempts": 0,
+  "expiresAt": "2026-10-11T02:00:00Z",
+  "cancelledReason": null,
+  "createdAt": "2026-10-11T01:45:00Z",
+  "items": [
+    {
+      "productId": "22222222-2222-2222-2222-222222222222",
+      "sku": "WIDGET-10",
+      "productName": "Ten-stock widget",
+      "quantity": 2,
+      "unitPrice": 5.00
+    }
+  ]
+}
+
+After this call, GET /api/v1/products/WIDGET-10 shows stock 8.
+
+
+REQUEST — idempotent replay (same key, same body)
+-------------------------------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-1
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-10",
+      "quantity": 2
+    }
+  ]
+}
+
+
+RESPONSE 200 OK
+---------------
+Same JSON body as the original 201 (same order id). Stock is not decremented again.
+
+
+REQUEST — idempotency conflict (same key, different body)
+---------------------------------------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-1
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-10",
+      "quantity": 1
+    }
+  ]
+}
+
+
+RESPONSE 409 IDEMPOTENCY_CONFLICT
+---------------------------------
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
+
+{
+  "type": "urn:orders:error:IDEMPOTENCY_CONFLICT",
+  "title": "IDEMPOTENCY_CONFLICT",
+  "status": 409,
+  "detail": "Idempotency-Key was reused with a different body",
+  "code": "IDEMPOTENCY_CONFLICT"
+}
+
+
+REQUEST — insufficient stock (WIDGET-1 has stock 1)
+---------------------------------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-short
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-1",
+      "quantity": 2
+    }
+  ]
+}
+
+
+RESPONSE 409 INSUFFICIENT_STOCK
+-------------------------------
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json
+
+{
+  "type": "urn:orders:error:INSUFFICIENT_STOCK",
+  "title": "INSUFFICIENT_STOCK",
+  "status": 409,
+  "detail": "Insufficient stock for SKU WIDGET-1",
+  "code": "INSUFFICIENT_STOCK"
+}
+
+
+REQUEST — unknown SKU
+---------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-missing-sku
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "NO-SUCH-SKU",
+      "quantity": 1
+    }
+  ]
+}
+
+
+RESPONSE 404 PRODUCT_NOT_FOUND
+------------------------------
+HTTP/1.1 404 Not Found
+Content-Type: application/problem+json
+
+{
+  "type": "urn:orders:error:PRODUCT_NOT_FOUND",
+  "title": "PRODUCT_NOT_FOUND",
+  "status": 404,
+  "detail": "One or more SKUs were not found",
+  "code": "PRODUCT_NOT_FOUND"
+}
+
+
+REQUEST — invalid quantity
+--------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-bad-qty
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-10",
+      "quantity": 0
+    }
+  ]
+}
+
+
+RESPONSE 400 VALIDATION_ERROR
+-----------------------------
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{
+  "type": "urn:orders:error:VALIDATION_ERROR",
+  "title": "VALIDATION_ERROR",
+  "status": 400,
+  "detail": "items[0].quantity must be greater than or equal to 1",
+  "code": "VALIDATION_ERROR"
+}
+
+
+REQUEST — missing Idempotency-Key
+---------------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "WIDGET-10",
+      "quantity": 1
+    }
+  ]
+}
+
+
+RESPONSE 400 VALIDATION_ERROR
+-----------------------------
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{
+  "type": "urn:orders:error:VALIDATION_ERROR",
+  "title": "VALIDATION_ERROR",
+  "status": 400,
+  "detail": "Missing header: Idempotency-Key",
+  "code": "VALIDATION_ERROR"
+}
+
+
+REQUEST — FAIL-CARD (creates PENDING_PAYMENT; job will fail payment)
+--------------------------------------------------------------------
+POST /api/v1/orders HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: demo-fail
+
+{
+  "customerId": "cust-1",
+  "items": [
+    {
+      "sku": "FAIL-CARD",
+      "quantity": 1
+    }
+  ]
+}
+
+Mock gateway always returns FAILURE for SKUs prefixed FAIL-. After 3 job
+attempts the order becomes CANCELLED with cancelledReason PAYMENT_FAILED
+and FAIL-CARD stock is restored.
